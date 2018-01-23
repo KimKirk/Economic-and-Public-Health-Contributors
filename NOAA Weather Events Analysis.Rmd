@@ -1,0 +1,275 @@
+---
+title: "NOAA Weather Analysis"
+author: "Kim Kirk"
+date: "January 16, 2018"
+output:
+  html_document: default
+  pdf_document: default
+fig.cap: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+```
+
+
+# U.S. National Oceanic and Atmospheric Administration's (NOAA) storm analysis
+### Storms and other severe weather events that have caused both public health and economic problems for communities and municipalities across the United States  
+
+### Synopsis
+The business questions, what is the highest ranking weather event for economic impact? and what is the highest ranking weather event for public health impact?, were answered. NOAA data was imported, cleaned, and analyzed for weather events that caused the most property and crop damage, as well as the most injuries and fatalities across the United States. Data was imported as csv file with variables not relevant to this analysis dropped to increase import speed. Weather event type (EVTYPE) was cleaned for obvious misspellings, see "Data Processing" for additional details. Injuries and fatalities (INJURIES, FATALITIES variables) were summed together to get a full scope for their impact on public health. Property and crops damage (PROPDMG, CROPDMG variables) were transformed into base 10 values and summed together to get a full scope for their impact on economic problems. The top ten highest ranking weather event types for public health impact and economic impact are presented as two separate visualizations. Top 2 weather events for public health impact include: Tornado and Thunderstorm Wind, for economic impact include: Flood and Hurricane/Typhoon.     
+
+
+
+#### Data Processing 
+The codebook provided by NOAA and their FAQ does not explicitly list variables and what they measure, so assumptions were made based on reading through the codebook and parsing together information gleaned there. The codebook designates that "only events permitted in Storm Data are listed in Table 1 of Section 2.1.1."; however, data entry personnel entered values not designated in the event types (EVTYPE). There may be values that essentially qualify as the same event type; however, they were entered as different event types and the variables for the data set were not clearly coded in the codebook, making it impossible to distinguish events types observed from designated event types per NOAA.
+
+The variables PROPDMGEXP and CROPDMGEXP are assumed to be unit designators for the PROPDMG and CROPDMG variables. Exploratory analysis of those variables showed many missing values and values that don't match the codebook designators. Normally, one would go back to the data source (NOAA) to inquire as to what the column value represents, but there is no way to contact them directly; thus, these values were dropped from the PROPDMG and CROPDMG variables. Breakdowns for percentage of values dropped include ~51% of total values PROPDMGEXP, 1% of total values PROPDMGEXP have values that do not make sense with the designators listed in the codebook (e.g. ? symbol, numbers, etc), ~68% of total CROPDMGEXP, 1% of total values CROPDMGEXP have values that do not make sense with the designators listed in the codebook (e.g. ? symbol, numbers, etc). 
+
+Percentage of values that can be analyzed include ~48% of total values PROPDMGEXP, ~31% of total values CROPDMGEXP. It is recognized more than 4% of values have to be dropped; thus, the analysis is not going to be as accurate. Normally, with missing data that is 4% or less, a valid solution would be to replace these values with the mean for the variable. However, upon additional research, the data is missing because there was bad reporting not due to errors in reporting; thus the data is sparse in nature.   
+
+
+
+NOAA data were downloaded from the specified URL and loaded into R as csv file with nonrelevant variables dropped to improve import speed and analysis.
+```{r}
+##set file path to save download to
+path <- file.path(paste(getwd(), 'repdata%2Fdata%2FStormData.csv.bz2', sep = "/"))
+
+##set url for download
+url <- "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2"
+
+##download file and save to working directory
+download.file(url, path)
+
+##read in dataset
+stormDataset <- read.csv("repdata%2Fdata%2FStormData.csv.bz2", stringsAsFactors = FALSE, na.strings = c("NA", ""), colClasses = c("NULL", "NULL", "NULL","NULL","NULL","NULL", "NULL", "character", "NULL", "NULL", "NULL","NULL","NULL","NULL", "NULL", "NULL", "NULL", "NULL","NULL","NULL","NULL", "NULL", "numeric", "numeric", "numeric", "character", "numeric", "character","NULL", "NULL", "NULL","NULL","NULL","NULL", "NULL", "NULL", "NULL") 
+)
+```
+
+The packages DPLYR, GGPLOT2, and FORMATTABLE were loaded to be used as needed throughout the analysis.
+```{r}
+
+##check environment for dplyr package and install or not as required
+##credit Matthew on StackOverflow https://stackoverflow.com/users/4125693/matthew
+using<-function(...) {
+    libs<-unlist(list(...))
+    req<-unlist(lapply(libs,require,character.only=TRUE))
+    need<-libs[req==FALSE]
+    n<-length(need)
+    if(n>0){
+        libsmsg<-if(n>2) paste(paste(need[1:(n-1)],collapse=", "),",",sep="") else need[1]
+        print(libsmsg)
+        if(n>1){
+            libsmsg<-paste(libsmsg," and ", need[n],sep="")
+        }
+        libsmsg<-paste("The following packages could not be found: ",libsmsg,"\n\r\n\rInstall missing packages?",collapse="")
+        if(winDialog(type = c("yesno"), libsmsg)=="YES"){       
+            install.packages(need)
+            lapply(need,require,character.only=TRUE)
+        }
+    }
+}
+
+##install and load packages 
+using("dplyr")
+using("ggplot2")
+using("formattable")
+```
+
+The INJURIES and FATALITIES variables were combined into new column that is sum of fatalities and injuries; to make it easier to graph the total of fatalities and injuries.
+```{r}
+##create new column that holds sum of INJURIES and FATALITIES columns
+injuriesFatalitiesDataset <- mutate(stormDataset, Injuries_Fatalities = INJURIES + FATALITIES)
+   
+```
+
+The associated EVTYPE was changed to all upper case to faciliate accurate grouping.
+```{r}
+##convert all values for EVTYPE variable to upper case to faciliate spelling search
+injuriesFatalitiesDataset$EVTYPE <- toupper(injuriesFatalitiesDataset$EVTYPE)
+```
+
+Any zero sum values were removed from the data set as they are not needed for analysis.
+```{r}
+##retrieve injuries and fatalities that are greater than 0; subset the data to make it easier to clean
+injuriesFatalitiesDataset <- injuriesFatalitiesDataset[injuriesFatalitiesDataset$Injuries_Fatalities != 0, ]
+```
+
+exploratory analysis of the misspelled words in the EVTYPE variable for injuries and fatalities analysis 
+```{r}
+##exploratory analysis of the misspelled words in the EVTYPE variable for injuries and fatalities analysis
+table(injuriesFatalitiesDataset$EVTYPE)
+```
+
+The weather event type variable (EVTYPE) was cleaned to correct obvious errors in spelling. Vectors of misspelled words were matched with correctly spelled words and reassigned to the found values. The decision to further clean the EVTYPE variable so that all values are recoded to codebook designated values was not carried out because some of the weather values reported may be observations that don't fit the codebook designated values; better to keep original values that show the reporter's observations than incorrectly recode values or mislabel values and miss crucial observations. 
+```{r}
+##vector of misspelled words 
+misspelled <- c("AVALANCE","COASTAL FLOODING", "COASTALSTORM", "FLASH FLOODING", 
+                    "FLOODING", "COLD TEMPERATURE",  "FLASH FLOODS", "FLASH FLOODING",
+                    "FLASH FLOODS", "FLASH FLOODING/FLOOD", "FLOOD/FLASH FLOOD", 
+                    "FLOODING", "GUSTY WINDS", "HEAT WAVES", "HEAVY RAINS" , "HIGH WINDS",
+                    "HIGH WIND AND SEAS", "HURRICANE OPAL/HIGH WINDS", "HYPOTHERMIA", 
+                    "ICE ON ROAD", "ICE ROADS", "ICE ROADS", "LANDSLIDES", "LIGHTNING.", 
+                    "MUDSLIDES", "MARINE ACCIDENT", "MARINE TSTM WIND", "RIP CURRENTS", 
+                    "RIVER FLOODING","SNOW SQUALLS", "STRONG WINDS", "THUNDERSNOW", 
+                    "THUNDERSTORM WINDS", "THUNDERSTORMW", "THUNDERSTORM WINDSS", 
+                    "THUNDERSTORMS WINDS", "THUNDERSTORM  WINDS", "THUNDERTORM WINDS", "TSTM WIND", "URBAN AND SMALL STREAM FLOODIN", 
+                    "URBAN/SML STREAM FLD", "WATERSPOUT TORNADO", "WILD FIRES", "WINDS", 
+                    "WINTER STORMS", "WINTER WEATHER MIX", "WINTRY MIX", "FLOODS", "HEAVY SURF/HIGH SURF", 
+                    "SEVERE THUNDERSTORM WINDS", "SEVERE THUNDERSTORMS", "THUDERSTORM WINDS", 
+                    "THUNDERSTORM WINDS HAIL", "THUNDERSTORMS", "THUNDERSTORMS WIND", "TSTM WIND/HAIL",
+                    "WILD/FOREST FIRES", "WILDFIRES", "WIND DAMAGE", "HAIL/WINDS", "HEAT WAVE", 
+                    "URBAN FLOODING")
+
+##vector of values used to correct misspelled words
+correct <- c("AVALANCHE", "COASTAL FLOOD", "COASTAL STORM", "FLASH FLOOD", 
+                    "FLOOD", "COLD", "FLASH FLOOD", "FLASH FLOOD","FLASH FLOOD", 
+                    "FLASH FLOOD/FLOOD", "FLASH FLOOD/FLOOD", "FLOOD", "GUSTY WIND", 
+                    "HEAT WAVE", "HEAVY RAIN", "HIGH WIND", "HIGH WIND/SEAS", "HURRICANE OPAL", 
+                    "HYPOTHERMIA/EXPOSURE", "ICY ROADS", "ICY ROADS", "ICY ROADS",  
+                    "LANDSLIDE", "LIGHTNING", "MUDSLIDE", "MARINE MISHAP", 
+                    "MARINE THUNDERSTORM WIND", "RIP CURRENT", "RIVER FLOOD",
+                    "SNOW SQUALL", "STRONG WIND", "THUNDERSTORM", "THUNDERSTORM WIND", 
+                    "THUNDERSTORM WIND", "THUNDERSTORM WIND", "THUNDERSTORM WIND", 
+                    "THUNDERSTORM WIND", "THUNDERSTORM WIND", "THUNDERSTORM WIND", "URBAN/SMALL STREAM FLOOD", 
+                    "URBAN/SMALL STREAM FLOOD", "WATERSPOUT/TORNADO", "WILDFIRE", 
+                    "WIND", "WINTER STORM", "WINTER WEATHER/MIX", "WINTER WEATHER/MIX", 
+                    "FLOOD", "HIGH SURF", "SEVERE THUNDERSTORM WIND", "SEVERE THUNDERSTORM WIND", 
+                    "THUNDERSTORM WIND","THUNDERSTORM WINDS/HAIL", "THUNDERSTORM", "THUNDERSTORM", "THUNDERSTORM WINDS/HAIL",
+                    "WILD/FOREST FIRE", "WILDFIRE", "WIND", "HAIL/WIND", "HEAT", "URBAN FLOOD")
+
+
+##correct the misspelled words; it takes more lines of code to create an object that can be passed by
+for(i in 1:length(misspelled)) {
+    injuriesFatalitiesDataset[["EVTYPE"]][injuriesFatalitiesDataset[["EVTYPE"]] %in% misspelled[i] ] <- correct[i] 
+}
+```
+
+The data set was grouped by EVTYPE and plotted (see "Results" section for visualization). 
+```{r}
+##group the data by event type and order by highest number of injuries and fatalities, retrieve the top 10 entries
+finalInjuriesFatalities<- injuriesFatalitiesDataset %>% group_by(EVTYPE) %>% summarise(InjuriesAndFatalities = sum(Injuries_Fatalities)) %>% arrange(desc(InjuriesAndFatalities)) %>% filter(InjuriesAndFatalities >=1554 )
+```
+
+Unit value designators from the PROPDMGEXP and CROPDMGEXP variables were used to index the data set.
+```{r}
+##finds unit value designators for damage cost
+findDesignators <- function(x) {
+    return(stormDataset[[x]] %in% c("K", "m", "M", "B", "k"))
+}
+
+##get index positions of CROPDMGEXP values that are complete unit designators
+indexPositions <- findDesignators("CROPDMGEXP") 
+    
+##get index positions of PROPDMGEXP values that are complete unit designators
+indexPositions2 <- findDesignators("PROPDMGEXP")
+
+##get CROPDMGEXP values that are to be included in data analysis
+##get PROPDMGEXP values that are to be included in data analysis
+damageDataset <- stormDataset[indexPositions & indexPositions2, ]
+```
+
+The associated EVTYPE was changed to all upper case to faciliate accurate grouping.
+```{r}
+##convert all values for EVTYPE variable to upper case to faciliate spelling search
+damageDataset$EVTYPE <- toupper(damageDataset$EVTYPE)
+```
+
+Exploratory analysis of the misspelled words in the EVTYPE variable for property and crops analysis
+```{r}
+##exploratory analysis of the misspelled words in the EVTYPE variable for property and crops analysis
+table(damageDataset$EVTYPE)
+```
+
+
+The weather event type variable (EVTYPE) was cleaned to correct obvious errors in spelling. Vectors of misspelled words were matched with correctly spelled words and reassigned to the found values. The decision to further clean the EVTYPE variable so that all values are recoded to codebook designated values was not carried out because some of the weather values reported may be observations that don't fit the codebook designated values; better to keep original values that show the reporter's observations than incorrectly recode values or mislabel values and miss crucial observations. 
+```{r}
+
+##use correctTheWords to correct EVTYPES misspellings
+for(i in 1:length(misspelled)) {
+    damageDataset[["EVTYPE"]][damageDataset[["EVTYPE"]] %in% misspelled[i] ] <- correct[i] 
+}
+```
+
+A list was created to hold the unit value designators to search on and their associated base 10 value to multiply by for the found PROPDMG and CROPDMG values; these values were computed and assigned to the data set.
+```{r}
+##holds variable values for converting *DMG variables to base 10 using corresponding designator from *DMGEXP variable
+my_list <-
+    list(
+        list(
+            c("K", "k"),
+            1000,
+            list("CROPDMGEXP", "PROPDMGEXP"),
+            list("CROPDMG", "PROPDMG")
+        ),
+        list(
+            c("B", "b"),
+            1000000000,
+            list("CROPDMGEXP", "PROPDMGEXP"),
+            list("CROPDMG", "PROPDMG")
+        ),
+        
+        list(
+            c("M", "m"),
+            1000000,
+            list("CROPDMGEXP", "PROPDMGEXP"),
+            list("CROPDMG", "PROPDMG")
+        )
+        
+    )
+
+
+##convert *DMG variables to base 10 using corresponding designator from *DMGEXP variable
+for(i in 1:length(my_list)) {
+    for (j in 1:length(my_list[[1]][[3]])) {
+        damageDataset[damageDataset[[my_list[[i]][[3]][[j]]]] %in% c(my_list[[i]][[1]]), my_list[[i]][[4]][[j]]] <-
+            damageDataset[damageDataset[[my_list[[i]][[3]][[j]]]] %in% c(my_list[[i]][[1]]), my_list[[i]][[4]][[j]]] * my_list[[i]][[2]]
+    }
+}
+```
+
+Additionally PROPDMG and CROPDMG were combined into a new column that is sum of damage for each this was done to make it easier to graph total of property and crops damages.
+```{r}
+
+##create new column to add the values together
+damageDataset <- mutate(damageDataset, Crops_Property_Damage = PROPDMG + CROPDMG)
+```
+
+The data set was grouped by EVTYPE, formatted for easier display in the visualization, and plotted (see "Results" section for visualization).
+```{r}
+
+##group/filter as did with previous question
+damageDataset<- damageDataset %>% group_by(EVTYPE) %>% summarise(Damage_Total = sum(Crops_Property_Damage)) %>% arrange(desc(Damage_Total)) %>% filter(Damage_Total >=4641493000 )
+
+
+##format currency for more legibility
+damageDataset["Damage_Total"] <- damageDataset["Damage_Total"] / 1000000000
+damageDataset$Damage_Total <- currency(damageDataset$Damage_Total)  
+```  
+
+### Results 
+
+```{r, fig.width=9, fig.height=7,fig.cap="Top 10 weather event types and the associated count of people who sustained injuries or fatalities across the United States."}
+##graph the top 10 entries 
+ggplot(finalInjuriesFatalities, aes(x = EVTYPE, y = InjuriesAndFatalities)) + geom_point(aes(color = EVTYPE), size = 4) + 
+    labs(x = "Weather Event Type", y = "Count of People Injuries and Fatalities", subtitle = "1950 - 2011")  + 
+    geom_text(aes(label = InjuriesAndFatalities, vjust = 1.45),  size = 3.5) + 
+    ggtitle("Top 10 Weather Events Most Harmful to Population Health Across the US" ) +  
+    theme(plot.title = element_text(color="red", size=14, face="bold.italic"), axis.title.x = element_text(face = "bold"),axis.title.y = element_text(face = "bold"), axis.text.x = element_text(size = 10, angle = 90))
+
+```
+
+```{r, fig.width=9, fig.height=7, fig.cap="Top 10 weather event types and the associated economic damage via property and crops damage across the United States."}
+##graph the top 10 entries 
+ggplot(damageDataset, aes(x = EVTYPE, y = Damage_Total)) + 
+labs(x = "Weather Event Type", y = "Total Crops and Property Damage in Billions ($)", subtitle = "1950 - 2011")  + 
+geom_text(aes(label = Damage_Total, vjust = 1.46), size = 3.5, angle = 30) + ggtitle("Top 10 Events With Greatest Economic Consequences Across the US") +  
+theme(plot.title = element_text(color="blue", size=14, face="bold.italic"), axis.title.x = element_text(face = "bold"), axis.title.y = element_text(face = "bold"), axis.text.x = element_text(size = 10, angle = 90)) + geom_point(size = 4) + 
+geom_point(aes(color = EVTYPE))
+
+```
+
+### Considerations
+
+Some considerations to improve analysis. Moving data reporting to centralized cloud computing database would save client money, allow NOAA access to data in realtime, and apply constraints on database fields to facilitate cleaner data which will improve data analysis performance on the client end.
