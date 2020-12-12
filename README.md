@@ -11,7 +11,7 @@ Processing Instructions:
 - Use R Studio or other application to read R script and R-Markdown file.
 
 Steps to Transformation:
-- NOAA data were downloaded from "https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2" and loaded into R as csv file with nonrelevant variables dropped to improve import speed and analysis.
+- NOAA data were downloaded from [here](https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2) and loaded into R as csv file with nonrelevant variables dropped to improve import speed and analysis.
 - The INJURIES and FATALITIES variables were combined into new column that is sum of fatalities and injuries; to make it easier to graph the total of fatalities and injuries..
 - The associated EVTYPE was changed to all upper case to faciliate accurate grouping.
 - Any zero sum values were removed from the data set as they are not needed for analysis.
